@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SawDust Clip</title>
+<style>
+  :root{
+    --ink:#0E1114; --panel:#181D22; --panel2:#20262C;
+    --bone:#F2EFE9; --steel:#8B96A0; --orange:#FF6B2C; --orange-dim:#B8481A;
+    --ring:#2A3138;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    background:var(--ink); color:var(--bone);
+    font-family:-apple-system,"SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; flex:0 0 auto;
+  }
+  .wordmark{font-weight:800; letter-spacing:.14em; font-size:15px;}
+  .wordmark em{font-style:normal; color:var(--orange);}
+  .status{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+    color:var(--steel); display:flex; align-items:center; gap:6px;
+  }
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--steel);}
+  .dot.rec{background:var(--orange); animation:pulse 1.4s infinite;}
+  @keyframes pulse{50%{opacity:.35}}
+
+  .stage{flex:1 1 auto; position:relative; margin:0 12px; border-radius:18px;
+    overflow:hidden; background:#000; min-height:0;}
+  video#preview{width:100%; height:100%; object-fit:cover; display:block;
+    transform:scaleX(var(--mirror,1));}
+  .overlay-msg{
+    position:absolute; inset:0; display:flex; flex-direction:column; gap:14px;
+    align-items:center; justify-content:center; text-align:center; padding:28px;
+    background:var(--panel); font-size:14px; line-height:1.5; color:var(--steel);
+  }
+  .overlay-msg strong{color:var(--bone); font-size:16px;}
+  .overlay-msg button{margin-top:4px;}
+  .flash{position:absolute; inset:0; background:var(--orange); opacity:0;
+    pointer-events:none; transition:opacity .5s;}
+  .flip{
+    position:absolute; top:12px; right:12px; width:40px; height:40px;
+    border-radius:50%; border:1px solid rgba(255,255,255,.25);
+    background:rgba(14,17,20,.55); color:var(--bone); font-size:18px;
+    backdrop-filter:blur(6px); cursor:pointer;
+  }
+
+  .deck{flex:0 0 auto; padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; gap:12px;}
+  .lookback{background:var(--panel); border-radius:14px; padding:12px 14px;}
+  .lookback .row{display:flex; justify-content:space-between; align-items:baseline;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+    color:var(--steel); letter-spacing:.08em;}
+  .lookback .row b{color:var(--bone); font-size:16px;}
+  input[type=range]{width:100%; margin-top:10px; accent-color:var(--orange);}
+
+  .controls{display:flex; align-items:center; justify-content:center; gap:22px;}
+  .clipwrap{position:relative; width:96px; height:96px;}
+  .bufring{position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(var(--orange) calc(var(--fill)*1turn), var(--ring) 0);
+  }
+  .bufring::after{content:""; position:absolute; inset:5px; border-radius:50%;
+    background:var(--ink);}
+  button.clip{
+    position:absolute; inset:10px; border-radius:50%; border:none; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, #FF8A52, var(--orange) 60%, var(--orange-dim));
+    color:#1A0D05; font-weight:800; letter-spacing:.12em; font-size:13px;
+    box-shadow:0 4px 18px rgba(255,107,44,.35);
+  }
+  button.clip:active{transform:scale(.94);}
+  button.clip:disabled{filter:grayscale(1) brightness(.6); box-shadow:none;}
+  .hint{font-family:ui-monospace,Menlo,monospace; font-size:10px; color:var(--steel);
+    text-align:center; letter-spacing:.06em;}
+
+  button.ghost{
+    background:var(--panel2); color:var(--bone); border:none; border-radius:12px;
+    padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  button.ghost:active{background:#2A323A;}
+
+  .tray{background:var(--panel); border-radius:14px; padding:10px 12px;
+    max-height:158px; overflow-y:auto; display:none;}
+  .tray.open{display:block;}
+  .tray h2{font-size:11px; letter-spacing:.12em; color:var(--steel);
+    font-family:ui-monospace,Menlo,monospace; margin-bottom:8px;}
+  .clipitem{display:flex; align-items:center; gap:10px; padding:7px 0;
+    border-top:1px solid rgba(255,255,255,.06);}
+  .clipitem:first-of-type{border-top:none;}
+  .clipitem video{width:76px; height:44px; border-radius:6px; object-fit:cover;
+    background:#000;}
+  .clipmeta{flex:1; font-size:12px; line-height:1.45;}
+  .clipmeta span{display:block; color:var(--steel);
+    font-family:ui-monospace,Menlo,monospace; font-size:10px;}
+  a.dl{color:var(--orange); text-decoration:none; font-weight:700; font-size:12px;
+    padding:8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">SAW<em>DUST</em> CLIP</div>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">standby</span></div>
+</header>
+
+<div class="stage">
+  <video id="preview" autoplay playsinline muted></video>
+  <div class="flash" id="flash"></div>
+  <button class="flip" id="flipBtn" title="Flip camera" style="display:none">⟳</button>
+  <div class="overlay-msg" id="startOverlay">
+    <strong>Ring-buffer camera</strong>
+    <div>SawDust records continuously into a rolling buffer.<br>
+    Press CLIP to save the moment that <i>already happened</i>.</div>
+    <button class="ghost" id="startBtn">Start camera</button>
+    <div id="errText" style="font-size:12px; color:var(--orange);"></div>
+  </div>
+</div>
+
+<div class="deck">
+  <div class="lookback">
+    <div class="row"><span>LOOKBACK</span><span><b id="lbVal">20</b> s minimum</span></div>
+    <input type="range" id="lbRange" min="5" max="60" step="5" value="20">
+  </div>
+  <div class="controls">
+    <button class="ghost" id="trayBtn">Clips (<span id="clipCount">0</span>)</button>
+    <div class="clipwrap">
+      <div class="bufring" id="bufring" style="--fill:0"></div>
+      <button class="clip" id="clipBtn" disabled>CLIP</button>
+    </div>
+    <button class="ghost" id="muteBtn">Mic on</button>
+  </div>
+  <div class="hint" id="hint">buffer filling — clips save the recent past, not the future</div>
+  <div class="tray" id="tray"><h2>SAVED CLIPS</h2><div id="clipList"></div></div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const preview=$("preview"), startOverlay=$("startOverlay"), errText=$("errText");
+  const clipBtn=$("clipBtn"), bufring=$("bufring"), dot=$("dot"),
+        statusText=$("statusText"), hint=$("hint"), flash=$("flash");
+  let stream=null, facing="environment", micOn=true;
+  let lookback=20;                 // minimum seconds of past saved
+  let recs=[null,null];            // two staggered recorder slots
+  let clipSeq=0, uiTimer=null;
+
+  const mime = ["video/mp4","video/webm;codecs=vp9,opus","video/webm"]
+    .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
+  const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+
+  // ---- recorder slot: contiguous stream so saved blobs are always playable
+  function makeSlot(){
+    const r = new MediaRecorder(stream, mime ? {mimeType:mime} : undefined);
+    const slot = {rec:r, chunks:[], born:Date.now(), pendingSave:false};
+    r.ondataavailable = e => { if(e.data && e.data.size) slot.chunks.push(e.data); };
+    r.onstop = () => {
+      if(slot.pendingSave){
+        const blob = new Blob(slot.chunks, {type: mime || "video/webm"});
+        addClip(blob, (Date.now()-slot.born)/1000);
+      }
+    };
+    r.start(1000);
+    return slot;
+  }
+  const age = s => s ? (Date.now()-s.born)/1000 : -1;
+
+  function startBuffering(){
+    stopBuffering();
+    recs[0] = makeSlot();
+    // stagger slot 2 by `lookback` so one slot always holds ≥ lookback of past
+    recs._stagger = setTimeout(()=>{ if(stream) recs[1]=makeSlot(); }, lookback*1000);
+    // rotation: any slot older than 2×lookback restarts (bounds memory)
+    recs._rot = setInterval(()=>{
+      recs.forEach((s,i)=>{
+        if(s && age(s) >= lookback*2 && recs.filter(x=>x&&age(x)>=lookback).length>1){
+          s.pendingSave=false; s.rec.stop(); recs[i]=makeSlot();
+        }
+      });
+    }, 1000);
+    clipBtn.disabled=false; dot.classList.add("rec"); statusText.textContent="buffering";
+    uiTimer = setInterval(()=>{
+      const best = Math.max(age(recs[0]), age(recs[1]));
+      bufring.style.setProperty("--fill", Math.min(best/lookback,1));
+      hint.textContent = best < lookback
+        ? `buffer ${Math.floor(best)}s / ${lookback}s — filling…`
+        : `armed — CLIP saves the last ${lookback}–${lookback*2}s`;
+    }, 250);
+  }
+  function stopBuffering(){
+    clearTimeout(recs._stagger); clearInterval(recs._rot); clearInterval(uiTimer);
+    recs.forEach(s=>{ if(s && s.rec.state!=="inactive"){s.pendingSave=false; s.rec.stop();} });
+    recs=[null,null];
+  }
+
+  // ---- clip = stop the OLDEST contiguous slot, save its blob, respawn it
+  function doClip(){
+    const idx = age(recs[0]) >= age(recs[1]) ? 0 : 1;
+    const slot = recs[idx];
+    if(!slot) return;
+    slot.pendingSave = true;
+    slot.rec.state!=="inactive" && slot.rec.stop();
+    recs[idx] = makeSlot();
+    flash.style.opacity=.7; requestAnimationFrame(()=>setTimeout(()=>flash.style.opacity=0,60));
+  }
+
+  function addClip(blob, seconds){
+    clipSeq++;
+    const url = URL.createObjectURL(blob);
+    const item = document.createElement("div");
+    item.className="clipitem";
+    const stamp = new Date().toLocaleTimeString();
+    item.innerHTML = `
+      <video src="${url}" playsinline controls preload="metadata"></video>
+      <div class="clipmeta">Clip ${clipSeq}
+        <span>${seconds.toFixed(1)}s of past · ${stamp} · ${(blob.size/1048576).toFixed(1)} MB</span>
+      </div>
+      <a class="dl" href="${url}" download="sawdust_clip_${clipSeq}.${ext}">Save</a>`;
+    $("clipList").prepend(item);
+    $("clipCount").textContent = clipSeq;
+    $("tray").classList.add("open");
+  }
+
+  // ---- camera lifecycle
+  async function startCamera(){
+    errText.textContent="";
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:facing, width:{ideal:1280}}, audio:true
+      });
+      stream.getAudioTracks().forEach(t=>t.enabled=micOn);
+      preview.srcObject = stream;
+      document.body.style.setProperty("--mirror", facing==="user" ? -1 : 1);
+      startOverlay.style.display="none";
+      $("flipBtn").style.display="block";
+      startBuffering();
+    }catch(e){
+      errText.textContent =
+        "Camera blocked here (" + e.name + "). If this preview is sandboxed, " +
+        "download this file and serve it locally (e.g. `python3 -m http.server`), " +
+        "then open it in your phone browser — camera needs https or localhost.";
+    }
+  }
+  function teardown(){
+    stopBuffering();
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+    dot.classList.remove("rec"); statusText.textContent="standby";
+    clipBtn.disabled=true; bufring.style.setProperty("--fill",0);
+  }
+
+  // ---- UI wiring
+  $("startBtn").onclick = startCamera;
+  clipBtn.onclick = doClip;
+  $("flipBtn").onclick = async ()=>{ facing = facing==="environment"?"user":"environment";
+    teardown(); await startCamera(); };
+  $("muteBtn").onclick = e => { micOn=!micOn;
+    e.target.textContent = micOn ? "Mic on" : "Mic off";
+    stream && stream.getAudioTracks().forEach(t=>t.enabled=micOn); };
+  $("trayBtn").onclick = ()=> $("tray").classList.toggle("open");
+  $("lbRange").oninput = e => { $("lbVal").textContent = e.target.value; };
+  $("lbRange").onchange = e => { lookback = +e.target.value;
+    if(stream){ startBuffering(); } };   // re-arm buffer with new window
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden && stream){ teardown(); startOverlay.style.display="flex"; }
+  });
+  if(!window.MediaRecorder){
+    errText.textContent="This browser doesn't support MediaRecorder.";
+    $("startBtn").disabled=true;
+  }
+})();
+</script>
+</body>
+</html>
